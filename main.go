@@ -23,9 +23,6 @@ func makeRequestPixel() http.HandlerFunc {
 	}
 }
 
-func init() {
-}
-
 func main() {
 	http.HandleFunc("/a.gif", makeRequestPixel())
 
