@@ -27,16 +27,13 @@ func makeHandlePixel(writeQueue chan []byte) http.HandlerFunc {
 
 func main() {
 	path := os.Getenv("OUTFILE")
-
 	var outfile *os.File
 	if path == "" {
-		outfile = os.Stdin
-	} else {
-		outfile, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
-		if err != nil {
-			panic(err)
-		}
-		defer outfile.Close()
+		panic(&struct{ s string }{"OUTFILE env variable required"})
+	}
+	outfile, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		panic(err)
 	}
 
 	port := os.Getenv("PORT")
@@ -50,7 +47,8 @@ func main() {
 	go WriteEventsToFile(outfile, writeQueue)
 
 	http.HandleFunc("/a.gif", makeHandlePixel(writeQueue))
-	err := http.ListenAndServe(port, nil)
+	err = http.ListenAndServe(port, nil)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start server")
 	}

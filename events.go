@@ -52,7 +52,7 @@ func LogPageEvent(req *http.Request, writeQueue chan []byte) {
 	event := PageEventFromRequest(req)
 	data, err := json.Marshal(event)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Failed to log json data")
+		fmt.Fprintln(os.Stderr, "Failed to create JSON data from event.")
 	} else {
 		writeQueue <- data
 	}
@@ -60,9 +60,11 @@ func LogPageEvent(req *http.Request, writeQueue chan []byte) {
 
 func WriteEventsToFile(outfile *os.File, messages chan []byte) {
 	for msg := range messages {
-		n, err := outfile.Write(msg)
-		if n != len(msg) || err != nil {
-			panic("Failed to write events to file")
+		msg = append(msg, '\n')
+		_, err := outfile.Write(msg)
+		if err != nil {
+			panic(err)
 		}
+		outfile.Sync()
 	}
 }
