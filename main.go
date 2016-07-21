@@ -1,8 +1,14 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/base64"
+	// "encoding/json"
 	"fmt"
+	_ "github.com/mattn/go-sqlite3"
+	"gopkg.in/reform.v1"
+	"gopkg.in/reform.v1/dialects/sqlite3"
+	"log"
 	"net/http"
 	"os"
 )
@@ -11,56 +17,64 @@ const pixelRaw = "R0lGODlhAQABAIAAANvf7wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
 const defaultPort = ":8080"
 const maxQueueSize = 2048
 
-func makeHandlePixel(writeQueue chan []byte) http.HandlerFunc {
+func makeHandlePixel(db *reform.DB) http.HandlerFunc {
 	pixel, err := base64.StdEncoding.DecodeString(pixelRaw)
 	if err != nil {
 		panic(err)
 	}
 
 	return func(out http.ResponseWriter, req *http.Request) {
-		go LogPageEvent(req, writeQueue)
+		go LogPageEvent(req, db)
 		out.Header().Set("Content-Type", "image/gif")
 		out.WriteHeader(http.StatusOK)
 		out.Write(pixel)
 	}
 }
 
-func WriteEventsToFile(outfile *os.File, messages chan []byte) {
-	for msg := range messages {
-		msg = append(msg, '\n')
-		_, err := outfile.Write(msg)
-		if err != nil {
-			panic(err)
-		}
-		outfile.Sync()
+func LogPageEvent(req *http.Request, db *reform.DB) {
+	event := PageEventFromRequest(req)
+	fmt.Println(event)
+	if err := db.Save(event); err != nil {
+		panic(err)
 	}
 }
 
-func main() {
-	path := os.Getenv("OUTFILE")
-	var outfile *os.File
+func initDB() *reform.DB {
+	path := os.Getenv("DB_FILE")
 	if path == "" {
-		panic(&struct{ s string }{"OUTFILE env variable required"})
+		path = "out.db"
 	}
-	outfile, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+
+	conn, err := sql.Open("sqlite3", path)
+	logger := log.New(os.Stderr, "SQL: ", log.Flags())
+	db := reform.NewDB(conn, sqlite3.Dialect, reform.NewPrintfLogger(logger.Printf))
+
 	if err != nil {
 		panic(err)
 	}
 
+	db.Exec(CreatePageEventTable)
+
+	return db
+}
+
+func getPort() string {
 	port := os.Getenv("PORT")
 	if port != "" {
 		port = ":" + port
 	} else {
 		port = defaultPort
 	}
+	return port
+}
 
-	writeQueue := make(chan []byte, maxQueueSize)
-	go WriteEventsToFile(outfile, writeQueue)
+func main() {
+	db := initDB()
+	port := getPort()
 
-	http.HandleFunc("/a.gif", makeHandlePixel(writeQueue))
-	err = http.ListenAndServe(port, nil)
+	http.HandleFunc("/a.gif", makeHandlePixel(db))
 
-	if err != nil {
+	if http.ListenAndServe(port, nil) != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start server")
 	}
 }

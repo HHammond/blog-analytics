@@ -20,3 +20,4 @@ clean:
 	- rm -f $(PRODUCT)
 	- find . -name "*_reform.go" -delete
 	- rm -f .pre-build
+	- find . -name "*.db" -delete
