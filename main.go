@@ -30,6 +30,7 @@ func makeHandlePixel(eventQueue chan *PageEvent) http.HandlerFunc {
 func runEventWriter(db *sql.DB, eventQueue chan *PageEvent) {
 	for ev := range eventQueue {
 		ev.InsertIntoDB(db)
+		fmt.Println(ev)
 	}
 }
 

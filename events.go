@@ -26,14 +26,8 @@ const (
 			session_token    text,
 			user_token       text
 		);
-		CREATE INDEX IF NOT EXISTS idx_datetime ON page_events (datetime);
-		CREATE INDEX IF NOT EXISTS idx_referrer ON page_events (referrer);
-		CREATE INDEX IF NOT EXISTS idx_title ON page_events (title);
-		CREATE INDEX IF NOT EXISTS idx_event_type ON page_events (event_type);
-		CREATE INDEX IF NOT EXISTS idx_url ON page_events (url);
-		CREATE INDEX IF NOT EXISTS idx_session_token ON page_events (session_token);
 
-		PRAGMA journal_mode = PERSIST;
+		PRAGMA journal_mode = WAL;
 	`
 	SQLPageEventInsert = `
 		INSERT INTO page_events(
