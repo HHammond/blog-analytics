@@ -25,6 +25,17 @@ func makeHandlePixel(writeQueue chan []byte) http.HandlerFunc {
 	}
 }
 
+func WriteEventsToFile(outfile *os.File, messages chan []byte) {
+	for msg := range messages {
+		msg = append(msg, '\n')
+		_, err := outfile.Write(msg)
+		if err != nil {
+			panic(err)
+		}
+		outfile.Sync()
+	}
+}
+
 func main() {
 	path := os.Getenv("OUTFILE")
 	var outfile *os.File

@@ -1,8 +1,11 @@
+//go:generate reform
+
 package main
 
 import (
 	"encoding/json"
 	"fmt"
+	// "gopkg.in/reform.v1"
 	"net/http"
 	"os"
 	"time"
@@ -12,20 +15,21 @@ const (
 	PageEventSchemaVersion = "1"
 )
 
+//reform:page_events
 type PageEvent struct {
-	SchemaVersion  string    `json:"schema_version"`
-	ScriptVersion  string    `json:"script_version"`
-	Time           time.Time `json:"datetime"`
-	Host           string    `json:"server"`
-	RemoteAddr     string    `json:"remote_addr"`
-	UserAgent      string    `json:"user_agent"`
-	RequestReferer string    `json:"referer"`
-	Title          string    `json:"title"`
-	PageReferrer   string    `json:"referer"`
-	URL            string    `json:"url"`
-	EventType      string    `json:"event_type"`
-	SessionToken   string    `json:"session_token"`
-	UserToken      string    `json:"user_token"`
+	SchemaVersion  string    `reform:"schema_version"  json:"schema_version"`
+	ScriptVersion  string    `reform:"script_version"  json:"script_version"`
+	Time           time.Time `reform:"datetime"        json:"datetime"`
+	Host           string    `reform:"server"          json:"server"`
+	RemoteAddr     string    `reform:"remote_addr"     json:"remote_addr"`
+	UserAgent      string    `reform:"user_agent"      json:"user_agent"`
+	RequestReferer string    `reform:"request_referer" json:"request_referer"`
+	Title          string    `reform:"title"           json:"title"`
+	PageReferrer   string    `reform:"referer"         json:"referer"`
+	URL            string    `reform:"url"             json:"url"`
+	EventType      string    `reform:"event_type"      json:"event_type"`
+	SessionToken   string    `reform:"session_token"   json:"session_token"`
+	UserToken      string    `reform:"user_token"      json:"user_token"`
 }
 
 func PageEventFromRequest(req *http.Request) *PageEvent {
@@ -55,16 +59,5 @@ func LogPageEvent(req *http.Request, writeQueue chan []byte) {
 		fmt.Fprintln(os.Stderr, "Failed to create JSON data from event.")
 	} else {
 		writeQueue <- data
-	}
-}
-
-func WriteEventsToFile(outfile *os.File, messages chan []byte) {
-	for msg := range messages {
-		msg = append(msg, '\n')
-		_, err := outfile.Write(msg)
-		if err != nil {
-			panic(err)
-		}
-		outfile.Sync()
 	}
 }
