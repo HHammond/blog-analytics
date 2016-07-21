@@ -3,13 +3,14 @@
 package main
 
 import (
+	"database/sql"
 	"net/http"
 	"time"
 )
 
 const (
-	PageEventSchemaVersion = 1
-	CreatePageEventTable   = `
+	PageEventSchemaVersion  = 1
+	SQLPageEventCreateTable = `
 		CREATE TABLE IF NOT EXISTS page_events (
 			schema_version   integer,
 			script_version   integer,
@@ -25,47 +26,93 @@ const (
 			session_token    text,
 			user_token       text
 		);
+		CREATE INDEX IF NOT EXISTS idx_datetime ON page_events (datetime);
+		CREATE INDEX IF NOT EXISTS idx_referrer ON page_events (referrer);
+		CREATE INDEX IF NOT EXISTS idx_title ON page_events (title);
+		CREATE INDEX IF NOT EXISTS idx_event_type ON page_events (event_type);
+		CREATE INDEX IF NOT EXISTS idx_url ON page_events (url);
+		CREATE INDEX IF NOT EXISTS idx_session_token ON page_events (session_token);
 
-		CREATE INDEX idx_referrer    ON page_events(referrer);
-		CREATE INDEX idx_title 	     ON page_events(title);
-		CREATE INDEX idx_remote_addr ON page_events(remote_addr);
+		PRAGMA journal_mode = PERSIST;
+	`
+	SQLPageEventInsert = `
+		INSERT INTO page_events(
+			schema_version,
+			script_version,
+			datetime,
+			server,
+			remote_addr,
+			user_agent,
+			request_referrer,
+			title,
+			referrer,
+			url,
+			event_type,
+			session_token,
+			user_token
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
 )
 
 //reform:page_events
 type PageEvent struct {
-	ID              int32     `reform:"id,pk"`
-	SchemaVersion   int       `reform:"schema_version"  json:"schema_version"`
-	ScriptVersion   string    `reform:"script_version"  json:"script_version"`
-	Time            time.Time `reform:"datetime"        json:"datetime"`
-	Host            string    `reform:"server"          json:"server"`
-	RemoteAddr      string    `reform:"remote_addr"     json:"remote_addr"`
-	UserAgent       string    `reform:"user_agent"      json:"user_agent"`
-	RequestReferrer string    `reform:"request_referrer" json:"request_referrer"`
-	Title           string    `reform:"title"           json:"title"`
-	PageReferrer    string    `reform:"referrer"         json:"referrer"`
-	URL             string    `reform:"url"             json:"url"`
-	EventType       string    `reform:"event_type"      json:"event_type"`
-	SessionToken    string    `reform:"session_token"   json:"session_token"`
-	UserToken       string    `reform:"user_token"      json:"user_token"`
+	ScriptVersion   string    `json:"script_version"`
+	Time            time.Time `json:"datetime"`
+	Host            string    `json:"server"`
+	RemoteAddr      string    `json:"remote_addr"`
+	UserAgent       string    `json:"user_agent"`
+	RequestReferrer string    `json:"request_referrer"`
+	Title           string    `json:"title"`
+	PageReferrer    string    `json:"referrer"`
+	URL             string    `json:"url"`
+	EventType       string    `json:"event_type"`
+	SessionToken    string    `json:"session_token"`
+	UserToken       string    `json:"user_token"`
 }
 
 func PageEventFromRequest(req *http.Request) *PageEvent {
 	params := req.URL.Query()
 	return &PageEvent{
-		SchemaVersion:   PageEventSchemaVersion,
 		Host:            req.Host,
 		RemoteAddr:      req.RemoteAddr,
 		UserAgent:       req.UserAgent(),
 		RequestReferrer: req.Referer(),
 		Time:            time.Now(),
+		Title:           params.Get("title"),
+		PageReferrer:    params.Get("referrer"),
+		URL:             params.Get("url"),
+		ScriptVersion:   params.Get("version"),
+		EventType:       params.Get("event_type"),
+		SessionToken:    params.Get("session_token"),
+		UserToken:       params.Get("user_token"),
+	}
+}
 
-		Title:         params.Get("title"),
-		PageReferrer:  params.Get("referrer"),
-		URL:           params.Get("url"),
-		ScriptVersion: params.Get("version"),
-		EventType:     params.Get("event_type"),
-		SessionToken:  params.Get("session_token"),
-		UserToken:     params.Get("user_token"),
+func (ev PageEvent) InsertIntoDB(db *sql.DB) {
+	stmt, err := db.Prepare(SQLPageEventInsert)
+	if err != nil {
+		panic(err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(
+		PageEventSchemaVersion,
+		ev.ScriptVersion,
+		ev.Time,
+		ev.Host,
+		ev.RemoteAddr,
+		ev.UserAgent,
+		ev.RequestReferrer,
+		ev.Title,
+		ev.PageReferrer,
+		ev.URL,
+		ev.EventType,
+		ev.SessionToken,
+		ev.UserToken,
+	)
+
+	if err != nil {
+		panic(err)
 	}
 }
