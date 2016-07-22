@@ -7,6 +7,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"net/http"
 	"os"
+	"time"
 )
 
 const pixelRaw = "R0lGODlhAQABAIAAANvf7wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
@@ -28,9 +29,23 @@ func makeHandlePixel(eventQueue chan *PageEvent) http.HandlerFunc {
 }
 
 func runEventWriter(db *sql.DB, eventQueue chan *PageEvent) {
-	for ev := range eventQueue {
-		ev.InsertIntoDB(db)
-		fmt.Println(ev)
+	queue := make([]*PageEvent, 0, 100000)
+	for {
+		select {
+		case ev := <-eventQueue:
+			queue = append(queue, ev)
+
+		case <-time.After(time.Millisecond * 5):
+			if len(queue) > 0 {
+				db.Exec("BEGIN TRANSACTION;")
+				for _, ev := range queue {
+					ev.InsertIntoDB(db)
+					fmt.Println(ev)
+				}
+				db.Exec("END TRANSACTION;")
+				queue = queue[:0]
+			}
+		}
 	}
 }
 

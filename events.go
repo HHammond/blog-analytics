@@ -27,7 +27,7 @@ const (
 			user_token       text
 		);
 
-		PRAGMA journal_mode = WAL;
+		PRAGMA journal_mode = MEMORY;
 	`
 	SQLPageEventInsert = `
 		INSERT INTO page_events(
