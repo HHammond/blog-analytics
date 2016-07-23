@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"github.com/caarlos0/env"
 	_ "github.com/mattn/go-sqlite3"
 	"net/http"
 	"os"
@@ -11,8 +12,34 @@ import (
 )
 
 const pixelRaw = "R0lGODlhAQABAIAAANvf7wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
-const defaultPort = ":8080"
-const maxQueueSize = 2048
+
+type Config struct {
+	Port                 string `env:"PORT"             envDefault:"8080"`
+	DBFile               string `env:"DB_FILE"          envDefault:"out.db"`
+	MaxConnections       int    `env:"MAX_CONNECTIONS"  envDefault:"100000"`
+	WriteQueueSize       int    `env:"WRITE_QUEUE_SIZE" envDefault:"100000"`
+	WriteFrequencyMillis int    `env:"WRITE_FREQUENCY"  envDefault:"100"`
+}
+
+var cfg = Config{}
+
+func main() {
+	err := env.Parse(&cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	db := initDB()
+	defer db.Close()
+
+	eventQueue := make(chan *PageEvent, cfg.MaxConnections)
+	http.HandleFunc("/a.gif", makeHandlePixel(eventQueue))
+	go runEventWriter(db, eventQueue)
+
+	if http.ListenAndServe(":"+cfg.Port, nil) != nil {
+		fmt.Fprintf(os.Stderr, "Failed to start server")
+	}
+}
 
 func makeHandlePixel(eventQueue chan *PageEvent) http.HandlerFunc {
 	pixel, err := base64.StdEncoding.DecodeString(pixelRaw)
@@ -29,20 +56,30 @@ func makeHandlePixel(eventQueue chan *PageEvent) http.HandlerFunc {
 }
 
 func runEventWriter(db *sql.DB, eventQueue chan *PageEvent) {
-	queue := make([]*PageEvent, 0, 100000)
+	queue := make([]*PageEvent, 0, cfg.WriteQueueSize)
+	executeWrite := make(chan bool)
+
+	go func() {
+		for {
+			select {
+			case <-time.After(time.Millisecond * time.Duration(cfg.WriteFrequencyMillis)):
+				executeWrite <- true
+			}
+		}
+	}()
+
 	for {
 		select {
 		case ev := <-eventQueue:
 			queue = append(queue, ev)
-
-		case <-time.After(time.Millisecond * 5):
+		case <-executeWrite:
 			if len(queue) > 0 {
 				db.Exec("BEGIN TRANSACTION;")
 				for _, ev := range queue {
 					ev.InsertIntoDB(db)
-					fmt.Println(ev)
 				}
 				db.Exec("END TRANSACTION;")
+				fmt.Println(len(queue), "of", cap(queue))
 				queue = queue[:0]
 			}
 		}
@@ -50,12 +87,7 @@ func runEventWriter(db *sql.DB, eventQueue chan *PageEvent) {
 }
 
 func initDB() *sql.DB {
-	path := os.Getenv("DB_FILE")
-	if path == "" {
-		path = "out.db"
-	}
-
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open("sqlite3", cfg.DBFile)
 
 	if err != nil {
 		panic(err)
@@ -70,29 +102,4 @@ func initDB() *sql.DB {
 	}
 
 	return db
-}
-
-func getPort() string {
-	port := os.Getenv("PORT")
-	if port != "" {
-		port = ":" + port
-	} else {
-		port = defaultPort
-	}
-	return port
-}
-
-func main() {
-	port := getPort()
-	db := initDB()
-	defer db.Close()
-	queue := make(chan *PageEvent, maxQueueSize)
-
-	go runEventWriter(db, queue)
-
-	http.HandleFunc("/a.gif", makeHandlePixel(queue))
-
-	if http.ListenAndServe(port, nil) != nil {
-		fmt.Fprintf(os.Stderr, "Failed to start server")
-	}
 }

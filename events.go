@@ -1,5 +1,3 @@
-//go:generate reform
-
 package main
 
 import (

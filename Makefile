@@ -3,6 +3,7 @@ PRODUCT="analytics"
 
 .pre-build:
 	go get -u github.com/mattn/go-sqlite3
+	go get -u github.com/caarlos0/env
 	touch .pre-build
 
 .PHONY: build
