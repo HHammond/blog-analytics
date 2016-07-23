@@ -26,5 +26,4 @@ _testmain.go
 script/
 analytics
 blog-analytics
-.prebuild
-*_reform.go
+.pre-build
