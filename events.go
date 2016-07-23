@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"time"
 )
@@ -9,10 +10,10 @@ import (
 const (
 	PageEventSchemaVersion  = 1
 	SQLPageEventCreateTable = `
-		CREATE TABLE IF NOT EXISTS page_events (
+		CREATE TABLE IF NOT EXISTS events (
 			schema_version   integer,
 			script_version   integer,
-			datetime		 datetime NOT NULL,
+			datetime         datetime NOT NULL,
 			server           text,
 			remote_addr      text,
 			user_agent       text,
@@ -28,7 +29,7 @@ const (
 		PRAGMA journal_mode = MEMORY;
 	`
 	SQLPageEventInsert = `
-		INSERT INTO page_events(
+		INSERT INTO events(
 			schema_version,
 			script_version,
 			datetime,
@@ -47,7 +48,6 @@ const (
 	`
 )
 
-//reform:page_events
 type PageEvent struct {
 	ScriptVersion   string    `json:"script_version"`
 	Time            time.Time `json:"datetime"`
@@ -84,7 +84,7 @@ func PageEventFromRequest(req *http.Request) *PageEvent {
 func (ev PageEvent) InsertIntoDB(db *sql.DB) {
 	stmt, err := db.Prepare(SQLPageEventInsert)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	defer stmt.Close()
 
@@ -105,6 +105,6 @@ func (ev PageEvent) InsertIntoDB(db *sql.DB) {
 	)
 
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

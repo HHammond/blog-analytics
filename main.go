@@ -3,11 +3,10 @@ package main
 import (
 	"database/sql"
 	"encoding/base64"
-	"fmt"
 	"github.com/caarlos0/env"
 	_ "github.com/mattn/go-sqlite3"
+	"log"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -18,36 +17,33 @@ const (
 
 type Config struct {
 	Port                 string `env:"PORT"             envDefault:"8080"`
-	DBFile               string `env:"DB_FILE"          envDefault:"out.db"`
-	MaxConnections       int    `env:"MAX_CONNECTIONS"  envDefault:"100000"`
+	DBFile               string `env:"DB_FILE"          envDefault:"events.db"`
+	MaxConnections       int    `env:"MAX_CONNECTIONS"  envDefault:"500000"`
 	WriteQueueSize       int    `env:"WRITE_QUEUE_SIZE" envDefault:"100000"`
-	WriteFrequencyMillis int    `env:"WRITE_FREQUENCY"  envDefault:"8"`
+	WriteFrequencyMillis int    `env:"WRITE_FREQUENCY"  envDefault:"15"`
 }
 
-var cfg = Config{}
-
 func main() {
-	err := env.Parse(&cfg)
-	if err != nil {
-		panic(err)
+	var config Config
+	if err := env.Parse(&config); err != nil {
+		log.Fatal(err)
 	}
 
-	db := initDB()
+	db := initDB(&config)
 	defer db.Close()
 
-	eventQueue := make(chan *PageEvent, cfg.MaxConnections)
-	go runEventWriter(db, eventQueue)
+	eventQueue := make(chan *PageEvent, config.MaxConnections)
 
+	go writeEvents(&config, db, eventQueue)
 	http.HandleFunc(pixelRoute, makeHandlePixel(eventQueue))
-	if http.ListenAndServe(":"+cfg.Port, nil) != nil {
-		fmt.Fprintf(os.Stderr, "Failed to start server")
-	}
+
+	log.Fatal(http.ListenAndServe(":"+config.Port, nil))
 }
 
 func makeHandlePixel(eventQueue chan *PageEvent) http.HandlerFunc {
 	pixel, err := base64.StdEncoding.DecodeString(pixelRaw)
 	if err != nil {
-		panic(err)
+		log.Fatalf("failed to encode pixel: %v", err)
 	}
 
 	return func(out http.ResponseWriter, req *http.Request) {
@@ -58,51 +54,47 @@ func makeHandlePixel(eventQueue chan *PageEvent) http.HandlerFunc {
 	}
 }
 
-func runEventWriter(db *sql.DB, eventQueue chan *PageEvent) {
-	queue := make([]*PageEvent, 0, cfg.WriteQueueSize)
-	executeWrite := make(chan bool)
-
-	writeFrequency := time.Duration(cfg.WriteFrequencyMillis)
-	go func() {
-		for {
-			select {
-			case <-time.After(time.Millisecond * writeFrequency):
-				executeWrite <- true
-			}
-		}
-	}()
+func writeEvents(config *Config, db *sql.DB, eventQueue chan *PageEvent) {
+	writeFrequency := time.Duration(time.Duration(config.WriteFrequencyMillis) * time.Millisecond)
+	writeTimer := time.NewTimer(writeFrequency)
+	writeQueue := make([]*PageEvent, 0, config.WriteQueueSize)
 
 	for {
 		select {
 		case ev := <-eventQueue:
-			queue = append(queue, ev)
-		case <-executeWrite:
-			if len(queue) > 0 {
+			writeQueue = append(writeQueue, ev)
+
+		case <-writeTimer.C:
+			if len(writeQueue) > 0 {
+				writeTimer.Stop()
+
 				db.Exec("BEGIN TRANSACTION;")
-				for _, ev := range queue {
+				for _, ev := range writeQueue {
 					ev.InsertIntoDB(db)
 				}
 				db.Exec("END TRANSACTION;")
-				fmt.Println("Wrote", len(queue), "records.")
-				queue = queue[:0]
+
+				log.Println("wrote", len(writeQueue), "records.")
+				writeQueue = writeQueue[:0]
 			}
+			writeTimer.Reset(writeFrequency)
 		}
 	}
 }
 
-func initDB() *sql.DB {
-	db, err := sql.Open("sqlite3", cfg.DBFile)
+func initDB(config *Config) *sql.DB {
+	db, err := sql.Open("sqlite3", config.DBFile)
 
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	if db == nil {
-		panic("DB is null")
+		log.Fatal("database is null")
 	}
 
 	_, err = db.Exec(SQLPageEventCreateTable)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	return db

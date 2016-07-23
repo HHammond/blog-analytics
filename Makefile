@@ -8,16 +8,15 @@ PRODUCT="analytics"
 
 .PHONY: build
 build: .pre-build
-	go build 
+	go build
 
-.PHONY: build-arm
-build-arm: .pre-build
-	GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 CC=gcc go build
+.PHONY: install
+install: .pre-build
+	go install
 
 .PHONY: clean
 clean:
 	- rm -f $(PRODUCT)
-	- find . -name "*_reform.go" -delete
 	- rm -f .pre-build
 	- find . -name "*.db" -delete
 	- find . -name "*.db-journal" -delete
