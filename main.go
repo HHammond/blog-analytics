@@ -11,14 +11,17 @@ import (
 	"time"
 )
 
-const pixelRaw = "R0lGODlhAQABAIAAANvf7wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
+const (
+	pixelRaw   = "R0lGODlhAQABAIAAANvf7wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
+	pixelRoute = "a.gif"
+)
 
 type Config struct {
 	Port                 string `env:"PORT"             envDefault:"8080"`
 	DBFile               string `env:"DB_FILE"          envDefault:"out.db"`
 	MaxConnections       int    `env:"MAX_CONNECTIONS"  envDefault:"100000"`
 	WriteQueueSize       int    `env:"WRITE_QUEUE_SIZE" envDefault:"100000"`
-	WriteFrequencyMillis int    `env:"WRITE_FREQUENCY"  envDefault:"3"`
+	WriteFrequencyMillis int    `env:"WRITE_FREQUENCY"  envDefault:"8"`
 }
 
 var cfg = Config{}
@@ -33,7 +36,7 @@ func main() {
 	defer db.Close()
 
 	eventQueue := make(chan *PageEvent, cfg.MaxConnections)
-	http.HandleFunc("/a.gif", makeHandlePixel(eventQueue))
+	http.HandleFunc(pixelRoute, makeHandlePixel(eventQueue))
 	go runEventWriter(db, eventQueue)
 
 	if http.ListenAndServe(":"+cfg.Port, nil) != nil {
@@ -79,7 +82,7 @@ func runEventWriter(db *sql.DB, eventQueue chan *PageEvent) {
 					ev.InsertIntoDB(db)
 				}
 				db.Exec("END TRANSACTION;")
-				fmt.Println("Wrote", len(queue), "records. Queue capacity is ", cap(queue))
+				fmt.Println("Wrote", len(queue), "records.")
 				queue = queue[:0]
 			}
 		}
