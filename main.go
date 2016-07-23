@@ -18,7 +18,7 @@ type Config struct {
 	DBFile               string `env:"DB_FILE"          envDefault:"out.db"`
 	MaxConnections       int    `env:"MAX_CONNECTIONS"  envDefault:"100000"`
 	WriteQueueSize       int    `env:"WRITE_QUEUE_SIZE" envDefault:"100000"`
-	WriteFrequencyMillis int    `env:"WRITE_FREQUENCY"  envDefault:"100"`
+	WriteFrequencyMillis int    `env:"WRITE_FREQUENCY"  envDefault:"3"`
 }
 
 var cfg = Config{}
@@ -79,7 +79,7 @@ func runEventWriter(db *sql.DB, eventQueue chan *PageEvent) {
 					ev.InsertIntoDB(db)
 				}
 				db.Exec("END TRANSACTION;")
-				fmt.Println(len(queue), "of", cap(queue))
+				fmt.Println("Wrote", len(queue), "records. Queue capacity is ", cap(queue))
 				queue = queue[:0]
 			}
 		}
