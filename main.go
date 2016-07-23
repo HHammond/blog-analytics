@@ -13,7 +13,7 @@ import (
 
 const (
 	pixelRaw   = "R0lGODlhAQABAIAAANvf7wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
-	pixelRoute = "a.gif"
+	pixelRoute = "/a.gif"
 )
 
 type Config struct {
@@ -36,9 +36,9 @@ func main() {
 	defer db.Close()
 
 	eventQueue := make(chan *PageEvent, cfg.MaxConnections)
-	http.HandleFunc(pixelRoute, makeHandlePixel(eventQueue))
 	go runEventWriter(db, eventQueue)
 
+	http.HandleFunc(pixelRoute, makeHandlePixel(eventQueue))
 	if http.ListenAndServe(":"+cfg.Port, nil) != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start server")
 	}
@@ -62,10 +62,11 @@ func runEventWriter(db *sql.DB, eventQueue chan *PageEvent) {
 	queue := make([]*PageEvent, 0, cfg.WriteQueueSize)
 	executeWrite := make(chan bool)
 
+	writeFrequency := time.Duration(cfg.WriteFrequencyMillis)
 	go func() {
 		for {
 			select {
-			case <-time.After(time.Millisecond * time.Duration(cfg.WriteFrequencyMillis)):
+			case <-time.After(time.Millisecond * writeFrequency):
 				executeWrite <- true
 			}
 		}
