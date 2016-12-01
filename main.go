@@ -30,12 +30,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db := initDB(&config)
-	defer db.Close()
-
 	eventQueue := make(chan *pageEvent, config.EventQueueSize)
 
-	go handleWriteEventQueue(&config, db, eventQueue)
+	go handleWriteEventQueue(&config, eventQueue)
 	http.HandleFunc(pixelRoute, makeHandlePixel(eventQueue))
 
 	log.Fatal(http.ListenAndServe(":"+config.Port, nil))
@@ -56,7 +53,10 @@ func makeHandlePixel(eventQueue chan *pageEvent) http.HandlerFunc {
 	}
 }
 
-func handleWriteEventQueue(config *config, db *sql.DB, eventQueue chan *pageEvent) {
+func handleWriteEventQueue(config *config, eventQueue chan *pageEvent) {
+	db := initDB(config)
+	defer db.Close()
+
 	writeFrequency := time.Duration(time.Duration(config.WriteFrequencyMillis) * time.Millisecond)
 	writeTimer := time.NewTimer(writeFrequency)
 
