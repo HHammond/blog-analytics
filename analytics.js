@@ -1,6 +1,10 @@
-var SimpleAnalytics = (function() {
+const SimpleAnaltyics_version = '0.0.1';
+const SimpleAnaltyics_endpoint = '127.0.0.1:8080/a.gif';
 
-    function generateGuid() {
+var SimpleAnalytics = SimpleAnalytics || {
+
+    generateGUID: function() {
+        // From http://stackoverflow.com/a/105074
         var result, i, j;
         result = '';
         for (j = 0; j < 32; j++) {
@@ -11,77 +15,103 @@ var SimpleAnalytics = (function() {
             result = result + i;
         }
         return result
-    }
+    },
 
-    const version = '0.0.1';
-    const endpoint = 'http://127.0.0.1:8080/a.gif';
-    const session = {
-        ut: localStorage.getItem('ut') || generateGuid(),
-        st: sessionStorage.getItem('st') || generateGuid(),
-    };
+    generateViewKey: function() {
+        var result = '';
+        for (var j = 0; j < 8; j++) {
+            result += Math.floor(Math.random() * 36).toString(36).toUpperCase();
+        }
+        return result;
+    },
 
-    sessionStorage.setItem('st', session.st);
-    localStorage.setItem('ut', session.ut);
+    buildURI: function(base, params, protocol) {
+        protocol = protocol || document.location.protocol;
+        base = protocol + '//' + base;
 
-    function buildURI(base, params) {
         var args = [];
         for (key in params) {
-            args.push(key + '=' + encodeURIComponent(params[key]));
+            if (params[key] !== null && params[key] != '') {
+                args.push(key + '=' + encodeURIComponent(params[key]));
+            }
         }
         return args.length > 0 ? base + '?' + args.join('&') : base;
-    }
+    },
 
-    var idx = 0;
+    getVersion: function() {
+        return SimpleAnaltyics_version;
+    },
 
-    function sendPayload(params) {
-        params.idx = idx++;
+    getEndpoint: function() {
+        return SimpleAnaltyics_endpoint;
+    },
 
-        var img = new Image;
-        img.src = buildURI(endpoint, params);
-        img.onload = function() {
-            img.src = '';
-        };
-    }
-
-    function getBasePayload() {
+    getParams: function() {
         var params = {
             url: encodeURIComponent(document.location.href),
             title: encodeURIComponent(document.title),
             ref: encodeURIComponent(document.referrer),
-            ver: version,
+            ver: this.getVersion(),
+            ut: localStorage.getItem('ut'),
+            st: sessionStorage.getItem('st'),
+            vwix: this.vwix || '',
         };
-
-        var ut = localStorage.getItem('ut');
-        var st = sessionStorage.getItem('st');
-        if (ut !== null) {
-            params.ut = ut;
-        }
-        if (st !== null) {
-            params.st = st;
-        }
         return params
-    }
+    },
 
-    function sendEvent(type) {
-        var params = getBasePayload();
-        params.evt = type;
-        sendPayload(params);
-    }
+    requestCount: 0,
 
-    function sendPageLoadEvent() {
-        sendEvent('sl');
-    }
+    sendEvent: function(evt) {
+        var params = this.getParams();
+        params.idx = this.requestCount++;
+        params.evt = evt || '';
 
-    function sendPageUpdateEvent() {
-        sendEvent('up');
-    }
+        var img = new Image;
+        img.src = this.buildURI(this.getEndpoint(), params);
+        img.onload = function() {
+            this.src = '';
+        };
+    },
 
-    sendPageLoadEvent();
-    var sendUpdate = setInterval(sendPageUpdateEvent, 5000);
+    sendPageLoadEvent: function() {
+        return this.sendEvent('in');
+    },
 
-    return {
-        stopUpdates: function() {
-            return clearInterval(sendUpdate);
-        },
+    sendPageUpdateEvent: function() {
+        return this.sendEvent('up');
+    },
+
+    sendPageExitEvent: function() {
+        return this.sendEvent('ex');
+    },
+
+    startUpdates: function() {
+        const updateSeconds = 10
+        var sendUpdate = this.sendPageUpdateEvent.bind(this);
+
+        if (this.updates) {
+            this.stopUpdates();
+        }
+
+        this.updates = setInterval(sendUpdate, updateSeconds * 1000);
+        return this.updates;
+    },
+
+    stopUpdates: function() {
+        clearInterval(this.updates);
+        this.updates = null;
+    },
+};
+
+(function() {
+    localStorage.setItem('ut', localStorage.getItem('ut') || SimpleAnalytics.generateGUID());
+    sessionStorage.setItem('st', sessionStorage.getItem('st') || SimpleAnalytics.generateGUID());
+
+    SimpleAnalytics.vwix = SimpleAnalytics.generateViewKey();
+    SimpleAnalytics.sendPageLoadEvent();
+    SimpleAnalytics.startUpdates();
+
+    window.onunload = function() {
+        SimpleAnalytics.sendPageExitEvent();
     };
 })();
