@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/caarlos0/env"
-	_ "github.com/mattn/go-sqlite3"
+	sqlite "github.com/mattn/go-sqlite3"
 )
 
 const (
 	pixelRaw   = "R0lGODlhAQABAIAAANvf7wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
 	pixelRoute = "/a.gif"
+	jsRoute    = "/a.js"
 )
 
 type config struct {
@@ -70,14 +71,7 @@ func handleWriteEventQueue(config *config, eventQueue chan *pageEvent) {
 		case <-writeTimer.C:
 			if len(writeQueue) > 0 {
 				writeTimer.Stop()
-
-				db.Exec("BEGIN TRANSACTION;")
-				for _, ev := range writeQueue {
-					writePageEventToDB(db, ev)
-				}
-				db.Exec("END TRANSACTION;")
-
-				log.Println("wrote", len(writeQueue), "records.")
+				writeEvents(db, writeQueue)
 				writeQueue = writeQueue[:0]
 			}
 			writeTimer.Reset(writeFrequency)
@@ -85,8 +79,24 @@ func handleWriteEventQueue(config *config, eventQueue chan *pageEvent) {
 	}
 }
 
+func writeEvents(db *sql.DB, events []*pageEvent) {
+	var ev *pageEvent
+	i := -1
+	db.Exec("BEGIN TRANSACTION;")
+	for i, ev = range events {
+		writePageEventToDB(db, ev)
+	}
+	db.Exec("END TRANSACTION;")
+
+	log.Println("wrote", i+1, "records.")
+}
+
 func initDB(config *config) *sql.DB {
-	db, err := sql.Open("sqlite3", config.DBFile)
+	sql.Register("sqlite3_custom", &sqlite.SQLiteDriver{
+		ConnectHook: registerSQLiteExtensions,
+	})
+
+	db, err := sql.Open("sqlite3_custom", config.DBFile)
 
 	if err != nil {
 		log.Fatal(err)
@@ -95,8 +105,7 @@ func initDB(config *config) *sql.DB {
 		log.Fatal("database is null")
 	}
 
-	_, err = db.Exec(sqlCreatePageEventTable)
-	if err != nil {
+	if _, err = db.Exec(sqlCreatePageEventTable); err != nil {
 		log.Fatal(err)
 	}
 
@@ -107,7 +116,6 @@ const (
 	pageEventSchemaVersion  = 1
 	sqlCreatePageEventTable = `
 		CREATE TABLE IF NOT EXISTS events (
-			schema_version   integer,
 			script_version   integer,
 			datetime         datetime NOT NULL,
 			server           text,
@@ -123,12 +131,12 @@ const (
 		);
 
 		CREATE INDEX IF NOT EXISTS idx1 ON events(url, referrer);
+		CREATE INDEX IF NOT EXISTS idx2 ON events(user_token, session_token, event_type);
 
-		PRAGMA journal_mode = MEMORY;
+		PRAGMA journal_mode = WAL;
 	`
 	sqlInsertPageEvent = `
 		INSERT INTO events(
-			schema_version,
 			script_version,
 			datetime,
 			server,
@@ -142,7 +150,7 @@ const (
 			session_token,
 			user_token
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
 )
 
@@ -159,10 +167,12 @@ type pageEvent struct {
 	EventType       string    `json:"event_type"`
 	SessionToken    string    `json:"session_token"`
 	UserToken       string    `json:"user_token"`
+	ViewIndex       string    `json:"view_index"`
 }
 
 func pageEventFromRequest(req *http.Request) *pageEvent {
 	params := req.URL.Query()
+
 	return &pageEvent{
 		Host:            req.Host,
 		RemoteAddr:      req.RemoteAddr,
@@ -176,6 +186,7 @@ func pageEventFromRequest(req *http.Request) *pageEvent {
 		EventType:       params.Get("evt"),
 		SessionToken:    params.Get("st"),
 		UserToken:       params.Get("ut"),
+		ViewIndex:       params.Get("vwix"),
 	}
 }
 
@@ -187,7 +198,6 @@ func writePageEventToDB(db *sql.DB, ev *pageEvent) {
 	defer stmt.Close()
 
 	_, err = stmt.Exec(
-		pageEventSchemaVersion,
 		ev.ScriptVersion,
 		ev.Time,
 		ev.Host,
