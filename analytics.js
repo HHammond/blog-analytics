@@ -1,5 +1,5 @@
 const SimpleAnaltyics_version = '0.0.1';
-const SimpleAnaltyics_endpoint = 'http://analytics.henryhhammond.com/orkka.gif';
+const SimpleAnaltyics_endpoint = 'analytics.henryhhammond.com/orkka.gif';
 
 var SimpleAnalytics = SimpleAnalytics || {
 
@@ -26,7 +26,7 @@ var SimpleAnalytics = SimpleAnalytics || {
     },
 
     buildURI: function(base, params, protocol) {
-        protocol = protocol || document.location.protocol;
+        protocol = "http:";
         base = protocol + '//' + base;
 
         var args = [];
