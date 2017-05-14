@@ -45,7 +45,7 @@ func main() {
 func makeHandleScript(file string) http.HandlerFunc {
 	javascript, err := ioutil.ReadFile(file)
 	if err != nil {
-		log.Fatal("Failed to read javascript file")
+		log.Fatal("Failed to read javascript file.", err)
 	}
 
 	return func(out http.ResponseWriter, req *http.Request) {
