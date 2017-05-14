@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/base64"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
@@ -20,9 +21,10 @@ const (
 type config struct {
 	Port                  string `env:"PORT"             envDefault:"8080"`
 	DBFile                string `env:"DB_FILE"          envDefault:"events.db"`
-	EventQueueSize        int    `env:"MAX_CONNECTIONS"  envDefault:"1000"`
-	WriteQueueDefaultSize int    `env:"WRITE_QUEUE_SIZE" envDefault:"10000"`
-	WriteFrequencyMillis  int    `env:"WRITE_FREQUENCY"  envDefault:"10"`
+	EventQueueSize        int    `env:"MAX_CONNECTIONS"  envDefault:"4096"`
+	WriteQueueDefaultSize int    `env:"WRITE_QUEUE_SIZE" envDefault:"1024"`
+	WriteFrequencyMillis  int    `env:"WRITE_FREQUENCY"  envDefault:"100"`
+	JSFile                string `env:"JSFile"           envDefault:"analytics.js"`
 }
 
 func main() {
@@ -33,10 +35,25 @@ func main() {
 
 	eventQueue := make(chan *pageEvent, config.EventQueueSize)
 
-	go handleWriteEventQueue(&config, eventQueue)
+	go processEventWriteQueue(&config, eventQueue)
 	http.HandleFunc(pixelRoute, makeHandlePixel(eventQueue))
+	http.HandleFunc(jsRoute, makeHandleScript(config.JSFile))
 
 	log.Fatal(http.ListenAndServe(":"+config.Port, nil))
+}
+
+func makeHandleScript(file string) http.HandlerFunc {
+	javascript, err := ioutil.ReadFile(file)
+	if err != nil {
+		log.Fatal("Failed to read javascript file")
+	}
+
+	return func(out http.ResponseWriter, req *http.Request) {
+		out.Header().Set("Content-Type", "text/javascript")
+		out.Header().Set("Cache-Control", "public, max-age=86400")
+		out.WriteHeader(http.StatusOK)
+		out.Write(javascript)
+	}
 }
 
 func makeHandlePixel(eventQueue chan *pageEvent) http.HandlerFunc {
@@ -47,14 +64,13 @@ func makeHandlePixel(eventQueue chan *pageEvent) http.HandlerFunc {
 
 	return func(out http.ResponseWriter, req *http.Request) {
 		eventQueue <- pageEventFromRequest(req)
-
 		out.Header().Set("Content-Type", "image/gif")
 		out.WriteHeader(http.StatusOK)
 		out.Write(pixel)
 	}
 }
 
-func handleWriteEventQueue(config *config, eventQueue chan *pageEvent) {
+func processEventWriteQueue(config *config, eventQueue chan *pageEvent) {
 	db := initDB(config)
 	defer db.Close()
 

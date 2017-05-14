@@ -86,7 +86,7 @@ var SimpleAnalytics = SimpleAnalytics || {
     },
 
     startUpdates: function() {
-        const updateSeconds = 10
+        const updateSeconds = this.requestCount > 300 ? 60 : 10 ;
         var sendUpdate = this.sendPageUpdateEvent.bind(this);
 
         if (this.updates) {
