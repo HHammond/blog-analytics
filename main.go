@@ -24,7 +24,7 @@ type config struct {
 	EventQueueSize        int    `env:"MAX_CONNECTIONS"  envDefault:"4096"`
 	WriteQueueDefaultSize int    `env:"WRITE_QUEUE_SIZE" envDefault:"1024"`
 	WriteFrequencyMillis  int    `env:"WRITE_FREQUENCY"  envDefault:"100"`
-	JSFile                string `env:"JSFile"           envDefault:"analytics.js"`
+	JSFile                string `env:"JSFILE"           envDefault:"analytics.js"`
 }
 
 func main() {
