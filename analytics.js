@@ -1,5 +1,5 @@
 const SimpleAnaltyics_version = '0.0.1';
-const SimpleAnaltyics_endpoint = '127.0.0.1:8080/a.gif';
+const SimpleAnaltyics_endpoint = 'http://analytics.henryhhammond.com/orkka.gif';
 
 var SimpleAnalytics = SimpleAnalytics || {
 

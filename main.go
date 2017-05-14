@@ -14,7 +14,7 @@ import (
 
 const (
 	pixelRaw   = "R0lGODlhAQABAIAAANvf7wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
-	pixelRoute = "/a.gif"
+	pixelRoute = "/orkka.gif"
 	jsRoute    = "/a.js"
 )
 
