@@ -21,10 +21,10 @@ const (
 type config struct {
 	Port                  string `env:"PORT"             envDefault:"8080"`
 	DBFile                string `env:"DB_FILE"          envDefault:"events.db"`
+	JSFile                string `env:"JS_FILE"          envDefault:"analytics.js"`
 	EventQueueSize        int    `env:"MAX_CONNECTIONS"  envDefault:"4096"`
 	WriteQueueDefaultSize int    `env:"WRITE_QUEUE_SIZE" envDefault:"1024"`
 	WriteFrequencyMillis  int    `env:"WRITE_FREQUENCY"  envDefault:"100"`
-	JSFile                string `env:"JSFILE"           envDefault:"analytics.js"`
 }
 
 func main() {
@@ -45,7 +45,7 @@ func main() {
 func makeHandleScript(file string) http.HandlerFunc {
 	javascript, err := ioutil.ReadFile(file)
 	if err != nil {
-		log.Fatal("Failed to read javascript file.", err)
+		log.Fatalf("Failed to read javascript file: %v", err)
 	}
 
 	return func(out http.ResponseWriter, req *http.Request) {
